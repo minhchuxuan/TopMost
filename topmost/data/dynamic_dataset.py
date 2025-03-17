@@ -5,7 +5,7 @@ import scipy.sparse
 import scipy.io
 from . import file_utils
 
-
+print("changed")
 class _SequentialDataset(Dataset):
     def __init__(self, bow, times, time_wordfreq):
         super().__init__()
@@ -30,6 +30,9 @@ class DynamicDataset:
     def __init__(self, dataset_dir, batch_size=200, read_labels=False, device='cpu', as_tensor=True):
 
         self.load_data(dataset_dir, read_labels)
+        
+        # Sort data by timestamps in ascending order
+        self.sort_by_time()
 
         self.vocab_size = len(self.vocab)
         self.train_size = len(self.train_bow)
@@ -52,7 +55,8 @@ class DynamicDataset:
             self.train_dataset = _SequentialDataset(self.train_bow, self.train_times, self.train_time_wordfreq)
             self.test_dataset = _SequentialDataset(self.test_bow, self.test_times, self.train_time_wordfreq)
 
-            self.train_dataloader = DataLoader(self.train_dataset, batch_size=batch_size, shuffle=True)
+            # Set shuffle=False to maintain time order
+            self.train_dataloader = DataLoader(self.train_dataset, batch_size=batch_size, shuffle=False)
 
     def load_data(self, path, read_labels):
         self.train_bow = scipy.sparse.load_npz(f'{path}/train_bow.npz').toarray().astype('float32')
@@ -72,6 +76,36 @@ class DynamicDataset:
         if read_labels:
             self.train_labels = np.loadtxt(f'{path}/train_labels.txt').astype('int32')
             self.test_labels = np.loadtxt(f'{path}/test_labels.txt').astype('int32')
+    
+    def sort_by_time(self):
+        """Sort all data arrays by timestamps in ascending order"""
+        # Sort training data
+        train_indices = np.argsort(self.train_times)
+        self.train_times = self.train_times[train_indices]
+        self.train_bow = self.train_bow[train_indices]
+        
+        # Update train_texts if available
+        if hasattr(self, 'train_texts') and self.train_texts:
+            self.train_texts = [self.train_texts[i] for i in train_indices]
+        
+        # Update train_labels if available
+        if hasattr(self, 'train_labels'):
+            self.train_labels = self.train_labels[train_indices]
+            
+        # Sort test data
+        test_indices = np.argsort(self.test_times)
+        self.test_times = self.test_times[test_indices]
+        self.test_bow = self.test_bow[test_indices]
+        
+        # Update test_texts if available
+        if hasattr(self, 'test_texts') and self.test_texts:
+            self.test_texts = [self.test_texts[i] for i in test_indices]
+            
+        # Update test_labels if available
+        if hasattr(self, 'test_labels'):
+            self.test_labels = self.test_labels[test_indices]
+        
+        print("Data sorted by timestamp in ascending order")
 
     # word frequency at each time slice.
     def get_time_wordfreq(self, bow, times):
